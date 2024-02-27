@@ -191,13 +191,10 @@ class Dojo:
         """Initialize Dojo."""
         logger.debug(f"Initializing Dojo for {self.entry}")
 
-        # Work in a temporary directory.
         self.origin_dir = Path.cwd()
-        self.tmp_dir = Path(mkdtemp(dir=TMP_DIR))
 
         try:
             self._install_handlers()
-            os.chdir(self.tmp_dir)
 
             # `cd` into the repo.
             traced_repo_path = get_traced_repo_path(self.repo)
@@ -281,12 +278,9 @@ class Dojo:
 
             return self, init_state
 
-        except Exception as ex:
-            os.chdir(self.origin_dir)
-            shutil.rmtree(self.tmp_dir)
-            raise ex
         finally:
             self._unmodify_file(traced_file)
+            os.chdir(self.origin_dir)
 
     def _locate_traced_file(self, traced_repo_path: Path) -> TracedFile:
         json_path = to_json_path(traced_repo_path, self.file_path, self.repo)
@@ -336,7 +330,6 @@ class Dojo:
             self._cleanup_container()
             self._cleanup_proc()
         finally:
-            self._cleanup_tmp_dir()
             self._uninstall_handlers()
 
     def _cleanup_container(self) -> None:
@@ -355,12 +348,6 @@ class Dojo:
         except TimeoutExpired:
             self.proc.kill()
 
-    def _cleanup_tmp_dir(self) -> None:
-        """Clean up the temporary directory."""
-        logger.debug("Cleaning up the temporary directory.")
-        os.chdir(self.origin_dir)
-        if self.tmp_dir is not None and os.path.exists(self.tmp_dir):
-            shutil.rmtree(self.tmp_dir)
 
     def __exit__(self, exc_type: None, exc_val: None, exc_tb: None) -> None:
         """Exit Dojo.
@@ -432,7 +419,9 @@ class Dojo:
                 oup.write(repl_code)
 
         # Create a backup so we can undo the changes at the end.
-        shutil.copy(self.file_path, self.file_path.with_suffix(".bak"))
+        bak = self.file_path.with_suffix(".bak")
+        assert not bak.exists(), f'{bak.resolve()} already exists'
+        shutil.copy(self.file_path, bak)
 
         # Write the modified code to the file.
         with self.file_path.open("wt") as oup:
