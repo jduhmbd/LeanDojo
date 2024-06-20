@@ -163,22 +163,14 @@ class Dojo:
         """Initialize Dojo."""
         logger.debug(f"Initializing Dojo for {self.entry}")
 
-        # Work in a temporary directory.
         self.origin_dir = Path.cwd()
-        self.tmp_dir = Path(mkdtemp(dir=TMP_DIR))
 
         try:
             self._install_handlers()
-            os.chdir(self.tmp_dir)
 
-            # Copy and `cd` into the repo.
+            # `cd` into the repo.
             traced_repo_path = get_traced_repo_path(self.repo)
-            shutil.copytree(
-                traced_repo_path,
-                self.repo.name,
-                ignore=ignore_patterns("*.dep_paths", "*.ast.json", "*.trace.xml"),
-            )
-            os.chdir(self.repo.name)
+            os.chdir(traced_repo_path)
 
             # Replace the human-written proof with a `repl` tactic.
             try:
@@ -249,10 +241,9 @@ class Dojo:
 
             return self, init_state
 
-        except Exception as ex:
+        finally:
+            self._unmodify_file(traced_file)
             os.chdir(self.origin_dir)
-            shutil.rmtree(self.tmp_dir)
-            raise ex
 
     def _locate_traced_file(self, traced_repo_path: Path) -> TracedFile:
         json_path = to_json_path(traced_repo_path, self.file_path, self.repo)
@@ -291,7 +282,6 @@ class Dojo:
             self._cleanup_container()
             self._cleanup_proc()
         finally:
-            self._cleanup_tmp_dir()
             self._uninstall_handlers()
 
     def _cleanup_container(self) -> None:
@@ -314,12 +304,6 @@ class Dojo:
             self.proc.kill()
         """
 
-    def _cleanup_tmp_dir(self) -> None:
-        """Clean up the temporary directory."""
-        logger.debug("Cleaning up the temporary directory.")
-        os.chdir(self.origin_dir)
-        if self.tmp_dir is not None and os.path.exists(self.tmp_dir):
-            shutil.rmtree(self.tmp_dir)
 
     def __exit__(self, exc_type: None, exc_val: None, exc_tb: None) -> None:
         """Exit Dojo.
@@ -399,6 +383,10 @@ class Dojo:
         # Write the modified code to the file.
         with self.file_path.open("wt") as oup:
             oup.write(modified_code)
+
+    def _unmodify_file(self, traced_file: TracedFile) -> None:
+        logger.debug(f"Restoring {traced_file.lean_file.path}")
+        os.rename(self.file_path.with_suffix(".bak"), self.file_path)
 
     def _modify_proof(self, traced_file: TracedFile) -> str:
         # Modify the proof and set up the `repl` tactic.

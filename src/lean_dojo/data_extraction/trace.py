@@ -22,10 +22,13 @@ LEAN4_DATA_EXTRACTOR_PATH = Path(__file__).with_name("ExtractData.lean")
 
 
 def _trace(repo: LeanGitRepo, build_deps: bool) -> None:
-    assert (
-        repo.exists()
-    ), f"The {repo} does not exist. Please check the URL `{repo.commit_url}`."
-
+    # assert (
+    #     repo.exists()
+    # ), f"The {repo} does not exist. Please check the URL `{repo.commit_url}`."
+    
+    # this still fails for private repos
+    logger.debug(f'Skipping repo.exists assertion')
+    
     # Trace `repo` in the current working directory.
     assert not repo.is_lean4, "Cannot trace Lean 4 itself."
     repo.clone_and_checkout()
@@ -92,6 +95,7 @@ def trace(
     repo: LeanGitRepo,
     dst_dir: Optional[Union[str, Path]] = None,
     build_deps: bool = True,
+    check_sanity: bool = True,
 ) -> TracedRepo:
     """Trace a repo (and its dependencies), saving the results to ``dst_dir``.
 
@@ -115,7 +119,8 @@ def trace(
     cached_path = get_traced_repo_path(repo, build_deps)
     logger.info(f"Loading the traced repo from {cached_path}")
     traced_repo = TracedRepo.load_from_disk(cached_path, build_deps)
-    traced_repo.check_sanity()
+    if check_sanity:
+        traced_repo.check_sanity()
 
     if dst_dir is not None:
         dst_dir.mkdir(parents=True)

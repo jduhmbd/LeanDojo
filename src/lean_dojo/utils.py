@@ -18,6 +18,7 @@ from ray.util.actor_pool import ActorPool
 from typing import Tuple, Union, List, Generator, Optional
 
 from .constants import NUM_WORKERS, TMP_DIR, LEAN4_PACKAGES_DIR, LEAN4_BUILD_DIR
+GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN", None)
 
 
 @contextmanager
@@ -70,8 +71,11 @@ def ray_actor_pool(
         Generator[ActorPool, None, None]: A :class:`ray.util.actor_pool.ActorPool` object.
     """
     assert not ray.is_initialized()
-    ray.init()
-    pool = ActorPool([actor_cls.remote(*args, **kwargs) for _ in range(NUM_WORKERS)])
+    _workers = 2
+    ray.init(num_cpus=_workers, num_gpus=0)
+    # replacing NUM_WORKERS
+    
+    pool = ActorPool([actor_cls.remote(*args, **kwargs) for _ in range(_workers)])
     try:
         yield pool
     finally:
@@ -194,8 +198,10 @@ def read_url(url: str, num_retries: int = 2) -> str:
     """Read the contents of the URL ``url``. Retry if failed"""
     backoff = 1
     while True:
+        request = urllib.request.Request(url)
+        request.add_header("Authorization", f"Bearer {GITHUB_ACCESS_TOKEN}")
         try:
-            with urllib.request.urlopen(url) as f:
+            with urllib.request.urlopen(request) as f:
                 return f.read().decode()
         except Exception as ex:
             if num_retries <= 0:
@@ -210,10 +216,18 @@ def read_url(url: str, num_retries: int = 2) -> str:
 def url_exists(url: str) -> bool:
     """Return True if the URL ``url`` exists."""
     try:
-        with urllib.request.urlopen(url) as _:
+        request = urllib.request.Request(url)
+        request.add_header("Authorization", f"Bearer {GITHUB_ACCESS_TOKEN}")
+        with urllib.request.urlopen(request) as _:
             return True
-    except urllib.error.HTTPError:
+    except (urllib.error.HTTPError, urllib.error.URLError) as ex:
         return False
+
+
+
+def parse_lean3_version(v: str) -> Tuple[int, int, int]:
+    assert v.startswith("v")
+    return tuple(int(_) for _ in v[1:].split("."))
 
 
 def parse_int_list(s: str) -> List[int]:
