@@ -360,12 +360,21 @@ class Dojo:
         repl_dst = Path(repl_file)
 
         if os.path.exists("lakefile.lean"):
-            with open("lakefile.lean", "a") as oup:
-                oup.write("\nlean_lib Lean4Repl {\n\n}\n")
+            with open("lakefile.lean", "r") as inp:
+                lakefile = inp.read()
+            if "Lean4Repl" not in lakefile:
+                with open("lakefile.lean", "a") as oup:
+                    oup.write("\nlean_lib Lean4Repl {\n\n}\n")
+                    
+            # with open("lakefile.lean", "a") as oup:
+                # oup.write("\nlean_lib Lean4Repl {\n\n}\n")
         else:
             assert os.path.exists("lakefile.toml")
-            with open("lakefile.toml", "a") as oup:
-                oup.write('\n[[lean_lib]]\nname = "Lean4Repl"\n')
+            with open("lakefile.toml", "r") as inp:
+                lakefile = inp.read()
+            if "Lean4Repl" not in lakefile:
+                with open("lakefile.toml", "a") as oup:
+                    oup.write('\n[[lean_lib]]\nname = "Lean4Repl"\n')
 
         if os.path.exists("lakefile.olean"):
             os.remove("lakefile.olean")
@@ -374,11 +383,20 @@ class Dojo:
 
         # Copy the REPL code to the right directory.
         repl_src = Path(__file__).with_name(repl_file)
+        
+        # Create a backup so we can undo the changes at the end.add
+        bak = self.file_path.with_suffix(".bak")
+        assert not bak.exists(), f'{bak.resolve()} already exists'
+        shutil.copy(self.file_path, bak)
+        
         repl_code = repl_src.open().read()
-        if repl_dst.exists():
-            raise DojoInitError(f"{repl_dst} exists")
-        with repl_dst.open("wt") as oup:
-            oup.write(repl_code)
+        if not repl_dst.exists():
+            with repl_dst.open("wt") as oup:
+                oup.write(repl_code)
+        # if repl_dst.exists():
+        #     raise DojoInitError(f"{repl_dst} exists")
+        # with repl_dst.open("wt") as oup:
+        #     oup.write(repl_code)
 
         # Write the modified code to the file.
         with self.file_path.open("wt") as oup:
